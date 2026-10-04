@@ -1,0 +1,818 @@
+# Regularization & Cross-Validation: Complete Interview Prep
+
+> Based on your handwritten notes, expanded with definitions, intuition, formulas, code, interview-style explanations, and a practice Q&A bank.
+
+---
+
+## Table of Contents
+
+**Part A: Regularization**
+1. Overfitting, Bias and Variance (foundation)
+2. Ridge Regression (L2)
+3. Lasso Regression (L1)
+4. Elastic Net (L1 + L2)
+5. Ridge vs Lasso vs Elastic Net
+
+**Part B: Cross-Validation**
+6. Why Cross-Validation?
+7. Train / Validation / Test split
+8. Leave-One-Out CV (LOOCV)
+9. Leave-P-Out CV (LPOCV)
+10. K-Fold CV
+11. Stratified K-Fold CV
+12. Time Series CV
+13. Comparison of CV methods
+
+**Part C: Practice**
+14. Interview Questions with Answers (Regularization)
+15. Interview Questions with Answers (Cross-Validation)
+16. Scenario / Rapid-Fire Questions
+17. Cheat Sheet
+
+---
+
+# PART A: REGULARIZATION
+
+## 1. Foundation: Overfitting, Bias and Variance
+
+### Definitions
+
+| Term | Meaning |
+|---|---|
+| **Overfitting** | Model learns the training data too well, including noise, so it fails on unseen data. |
+| **Underfitting** | Model is too simple to capture the pattern, so it does badly on both train and test data. |
+| **Bias** | Error from wrong or overly simple assumptions. High bias means underfitting. |
+| **Variance** | Sensitivity of the model to small changes in the training data. High variance means overfitting. |
+
+### From your notes
+
+```
+Overfitting:
+  Train data -> Accuracy HIGH -> Low Bias
+  Test data  -> Accuracy LOW  -> High Variance
+```
+
+### Intuition
+
+Imagine a student who memorizes past exam papers word for word. They score 100% on practice papers (train) but fail when the questions change (test). Regularization forces the model to learn *general rules* instead of memorizing.
+
+### Why does overfitting happen?
+- Too many features (high dimensionality)
+- Model too complex (e.g., high-degree polynomial)
+- Too little training data
+- Noisy data
+- Features that are highly correlated (multicollinearity), which leads to huge, unstable coefficients
+
+### What is Regularization?
+**Regularization** is a technique that adds a **penalty term** to the cost function to discourage large coefficients (slopes). It deliberately accepts a *slightly worse fit on training data* in exchange for *better generalization* on test data (trading a bit of bias for a large reduction in variance).
+
+---
+
+## 2. Ridge Regression (L2 Regularization)
+
+### Definition
+Ridge regression is linear regression with an **L2 penalty**: the sum of the *squares* of the coefficients is added to the cost function.
+
+### Cost Function
+
+**Normal linear regression (MSE):**
+
+```
+J(θ) = (1 / 2m) · Σ (hθ(x⁽ⁱ⁾) − y⁽ⁱ⁾)²        i = 1..m
+```
+
+**Ridge regression:**
+
+```
+J(θ) = (1 / 2m) · Σ (hθ(x⁽ⁱ⁾) − y⁽ⁱ⁾)²  +  λ · Σ θⱼ²
+                  i = 1..m                    j = 1..n
+        \_______ error term _______/        \_ penalty _/
+```
+
+- `m` = number of training samples
+- `n` = number of features
+- `θⱼ` = slope / coefficient of feature j (the intercept θ₀ is normally **not** penalized)
+- `λ` (lambda, sometimes called alpha in sklearn) = **hyperparameter** controlling penalty strength
+
+### Understanding λ (from your notes)
+
+| λ value | Effect |
+|---|---|
+| **λ = 0** | No penalty, so it is the same as plain linear regression (the "global minimum" in your diagram) |
+| **λ small** | Slight shrinkage |
+| **λ large** | Heavy shrinkage, slopes approach 0, model may underfit |
+| **λ → ∞** | All slopes ≈ 0, model predicts just the mean |
+
+**Key rule from your notes:**  `λ ↑  →  Slope ↓`
+
+### Reading your J(θ) diagram
+Your sketch shows several parabolas for different λ values (λ = 0, λ = 10, λ = 30). As λ increases:
+- The cost curve moves **up** and its minimum shifts **toward θ = 0**.
+- That new minimum is the "new global minima" in your notes: the optimal θ with penalty is smaller than the unpenalized optimal θ.
+
+### Worked example (from your notes)
+
+Before ridge:
+```
+hθ(x) = 0.34 + 0.52·x₁ + 0.48·x₂ + 0.24·x₃ + ...
+```
+Interpretation: if x₁ moves by 1 unit, y moves by 0.52.
+
+After ridge:
+```
+hθ(x) = 0.34 + 0.40·x₁ + 0.38·x₂ + 0.14·x₃ + ...
+```
+- Slopes became **smaller**, but **never exactly zero**.
+- Ridge **reduces the impact** of features that are not strongly correlated with the output.
+
+### Why smaller slopes reduce overfitting
+A steep slope means the prediction changes a lot for a tiny change in input, so the model is very sensitive to noise. A flatter slope gives a smoother, more stable model, which means lower variance.
+
+### Key properties of Ridge
+- Shrinks coefficients **toward zero but never exactly to zero**
+- Keeps **all features** in the model
+- Works well when **many features each contribute a little**
+- Handles **multicollinearity** well (it stabilizes coefficients of correlated features)
+- Has a closed-form solution: `θ = (XᵀX + λI)⁻¹ Xᵀy`. Adding `λI` makes the matrix always invertible.
+- **Requires feature scaling** (standardize features first), since the penalty depends on coefficient magnitude
+
+### When to use Ridge
+- You have many features that are all somewhat useful
+- Multicollinearity is present
+- You want to reduce overfitting without removing features
+
+### Code (scikit-learn)
+
+```python
+from sklearn.linear_model import Ridge, RidgeCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
+model = make_pipeline(StandardScaler(), Ridge(alpha=1.0))   # alpha = λ
+model.fit(X_train, y_train)
+
+# Choose λ automatically with built-in CV
+ridge_cv = make_pipeline(StandardScaler(),
+                         RidgeCV(alphas=[0.01, 0.1, 1, 10, 100], cv=5))
+ridge_cv.fit(X_train, y_train)
+```
+
+---
+
+## 3. Lasso Regression (L1 Regularization)
+
+**LASSO** = **L**east **A**bsolute **S**hrinkage and **S**election **O**perator
+
+### Definition
+Lasso regression is linear regression with an **L1 penalty**: the sum of the *absolute values* of the coefficients is added to the cost function. It is mainly used for **feature selection**.
+
+### Cost Function
+
+```
+J(θ) = (1 / 2m) · Σ (hθ(x⁽ⁱ⁾) − y⁽ⁱ⁾)²  +  λ · Σ |θⱼ|
+                  i = 1..m                    j = 1..n
+```
+
+### Worked example (from your notes)
+
+Before / during Lasso:
+```
+hθ(x) = 0.52 + 0.65·x₁ + 0.72·x₂ + 0.34·x₃ + 0.12·x₄
+```
+After Lasso with a sufficiently large λ:
+```
+hθ(x) = 0.52 + 0.65·x₁ + 0.72·x₂ + 0.34·x₃ + 0·x₄
+```
+The coefficient of x₄ became **exactly 0**, so x₄ is **not an important feature** and is dropped. This is **automatic feature selection**.
+
+### Why does L1 produce exact zeros but L2 does not?
+
+**Geometric intuition:**
+- The L1 constraint region is a **diamond** (it has sharp corners on the axes).
+- The L2 constraint region is a **circle** (smooth, no corners).
+- The loss contours (ellipses) usually touch the diamond **at a corner**, where one coefficient = 0.
+- They touch the circle at a smooth point where neither coefficient is 0.
+
+**Gradient intuition:**
+- L2 penalty gradient = `2λθ`. It gets *smaller* as θ → 0, so θ shrinks but never quite reaches 0.
+- L1 penalty gradient = `λ·sign(θ)`. It is a **constant push** toward zero regardless of θ size, so small coefficients get pushed all the way to 0.
+
+### Reading your diagram
+Your plot shows curves for λ = 0, 10, 20, 40. As λ increases, the optimum slides toward θ = 0 (the dotted vertical line), and for large λ the coefficient hits **exactly 0**.
+
+### Key properties of Lasso
+- Produces **sparse models** (many coefficients exactly 0)
+- Performs **feature selection** automatically
+- Good when only a **few features are truly important**
+- With **highly correlated features**, it tends to pick one arbitrarily and drop the others (unstable)
+- No closed-form solution (the absolute value is not differentiable at 0), so it uses coordinate descent
+- **Requires feature scaling**
+- Cannot select more than `n` features when `p > n` (n = samples, p = features)
+
+### When to use Lasso
+- High-dimensional data with many irrelevant features
+- You want a simpler, more **interpretable** model
+- You want to reduce the number of features for deployment
+
+### Code
+
+```python
+from sklearn.linear_model import Lasso, LassoCV
+
+lasso = make_pipeline(StandardScaler(), Lasso(alpha=0.1))
+lasso.fit(X_train, y_train)
+
+# Which features survived?
+coefs = lasso.named_steps['lasso'].coef_
+selected = [f for f, c in zip(feature_names, coefs) if c != 0]
+```
+
+---
+
+## 4. Elastic Net (Combination of Ridge and Lasso)
+
+### Definition
+Elastic Net combines **both L1 and L2 penalties**, so it gets the benefits of both:
+1. **Reduces overfitting** (like Ridge)
+2. **Feature selection** (like Lasso)
+
+### Cost Function
+
+```
+J(θ) = (1 / 2m) · Σ (hθ(x⁽ⁱ⁾) − y⁽ⁱ⁾)²  +  λ₁ · Σ θⱼ²  +  λ₂ · Σ |θⱼ|
+                  i = 1..m                    j = 1..n        j = 1..n
+                                              (Ridge)         (Lasso)
+```
+
+> **Note:** In your handwritten notes the second summation runs to `m`. It should run over the **features** `j = 1..n`, since the penalty is on coefficients, not on samples.
+
+**scikit-learn parametrization:**
+```
+Penalty = alpha · [ l1_ratio · Σ|θⱼ|  +  ((1 − l1_ratio) / 2) · Σ θⱼ² ]
+```
+- `l1_ratio = 1` means pure Lasso
+- `l1_ratio = 0` means pure Ridge
+- `0 < l1_ratio < 1` means a mix
+
+### Why was Elastic Net invented?
+Lasso's weakness is that with a group of **highly correlated features** it randomly picks one and drops the rest. Elastic Net's L2 part encourages correlated features to be kept or dropped **together** (the "grouping effect"), which makes it more stable.
+
+### When to use Elastic Net
+- Many features **and** correlated features
+- Number of features > number of samples (`p > n`)
+- You want feature selection but Lasso is unstable
+
+### Code
+
+```python
+from sklearn.linear_model import ElasticNet, ElasticNetCV
+
+enet = make_pipeline(StandardScaler(), ElasticNet(alpha=0.1, l1_ratio=0.5))
+enet.fit(X_train, y_train)
+
+enet_cv = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, 1], cv=5)
+```
+
+---
+
+## 5. Ridge vs Lasso vs Elastic Net
+
+| Feature | Ridge (L2) | Lasso (L1) | Elastic Net |
+|---|---|---|---|
+| Penalty | Σ θ² | Σ \|θ\| | Both |
+| Coefficients → exactly 0? | No | **Yes** | **Yes** |
+| Feature selection | No | **Yes** | **Yes** |
+| Handles multicollinearity | **Best** | Poor (picks one) | **Good** (grouping effect) |
+| Best when | Many small effects | Few strong effects | Many correlated features, p > n |
+| Closed-form solution | Yes | No | No |
+| Hyperparameters | λ | λ | λ and l1_ratio |
+| Needs scaling | Yes | Yes | Yes |
+
+**One-liner memory trick:**
+- **Ridge** = *shrinks* (keeps everyone, makes them smaller)
+- **Lasso** = *selects* (kicks out useless features)
+- **Elastic Net** = *both*
+
+---
+
+# PART B: CROSS-VALIDATION
+
+## 6. Why Cross-Validation?
+
+### Definition
+**Cross-validation (CV)** is a resampling technique that evaluates a model by training and validating it on **multiple different splits** of the data, then averaging the results.
+
+### The problem it solves
+With a single train/validation split, your accuracy depends on **which rows happened to land in validation** (this is your `random_state` note). Look at your example:
+
+```
+Accuracy values from different splits: 85%   92%   78%
+```
+Which one is the real model performance? You cannot tell. CV gives you the **average (and the spread)**, a much more trustworthy estimate.
+
+### What CV is used for (from your notes)
+1. **Training our model:** checking it generalizes
+2. **Hyperparameter tuning:** choosing λ, k, tree depth, and so on, without touching the test set
+3. **Model selection:** comparing different algorithms fairly
+4. **Detecting overfitting**
+
+---
+
+## 7. Train / Validation / Test Split (from your diagram)
+
+```
+Dataset (100%)
+├── Training (70%)
+│     ├── Train       -> used to fit the model (and tune hyperparameters)
+│     └── Validation  -> used to evaluate during tuning  <- Cross-validation happens here
+└── Test (30%)        -> used ONCE at the end to check final performance
+```
+
+| Set | Purpose |
+|---|---|
+| **Train** | Learn model parameters (weights) |
+| **Validation** | Tune hyperparameters, compare models |
+| **Test** | Final unbiased performance estimate of the model |
+
+**Golden rule: never use the test set for tuning.** Otherwise information leaks and the test score becomes optimistic (**data leakage**).
+
+`random_state` fixes the random shuffle so results are reproducible.
+
+---
+
+## 8. Leave-One-Out CV (LOOCV)
+
+### Definition
+A CV technique where **each single record** is used once as the validation set while all the remaining `n − 1` records are used for training.
+
+### How it works (from your notes: 500 records)
+
+```
+Exp 1  : Validate on record 1,   train on records 2..500  -> Acc 1
+Exp 2  : Validate on record 2,   train on records 1,3..500 -> Acc 2
+...
+Exp 500: Validate on record 500, train on records 1..499  -> Acc 500
+
+Final accuracy = mean(Acc 1 ... Acc 500)
+```
+Total models trained = **n** (here 500).
+
+### Pros
+- **Uses almost all data** for training every time (low bias)
+- **No randomness**, since the result is deterministic
+- Good for **very small datasets**
+
+### Cons (from your notes)
+- **Computationally very expensive** (n models; imagine n = 1 million)
+- Each validation set is only **one point**, so each individual score is extremely noisy, so the **average has high variance**
+- The training sets are nearly identical across folds, so the scores are highly correlated
+- **Can lead to overfitting** to the CV estimate. Your notes describe it: training accuracy ↑↑ but validation accuracy ↓↓, then on new test data accuracy drops sharply.
+- Cannot be stratified (a single sample is not class-balanced)
+
+### Code
+```python
+from sklearn.model_selection import LeaveOneOut, cross_val_score
+scores = cross_val_score(model, X, y, cv=LeaveOneOut())
+print(scores.mean())
+```
+
+---
+
+## 9. Leave-P-Out CV (LPOCV)
+
+### Definition
+A generalization of LOOCV: **P records** are left out as validation in each experiment, and the model is trained on the rest. This is repeated for **every possible combination** of P records.
+
+### Number of experiments
+```
+Number of models = C(n, p) = n! / (p! · (n − p)!)
+```
+Example: n = 500, p = 2 gives C(500, 2) = **124,750** models. For p = 5 it is about 2.5 × 10¹¹, which is impossible in practice.
+
+(LOOCV is just Leave-P-Out with **p = 1**.)
+
+### Pros
+- Exhaustive and thorough
+- Very low bias
+
+### Cons
+- **Explosively expensive.** It is rarely used in practice, only for tiny datasets.
+- Validation sets overlap heavily across experiments
+
+### Code
+```python
+from sklearn.model_selection import LeavePOut
+lpo = LeavePOut(p=2)
+```
+
+---
+
+## 10. K-Fold Cross-Validation
+
+### Definition
+The training data is split into **K equal-sized folds**. In each of the K experiments, **one fold is the validation set** and the remaining K−1 folds are the training set. Every data point gets to be in validation **exactly once**.
+
+### How it works (from your notes: K = 5, n = 500)
+
+```
+Validation fold size = n / K = 500 / 5 = 100
+
+Exp 1: [VAL | train | train | train | train]  -> Acc 1   (first 100 rows = validation)
+Exp 2: [train | VAL | train | train | train]  -> Acc 2
+Exp 3: [train | train | VAL | train | train]  -> Acc 3
+Exp 4: [train | train | train | VAL | train]  -> Acc 4
+Exp 5: [train | train | train | train | VAL]  -> Acc 5
+
+Final Accuracy = (Acc1 + Acc2 + Acc3 + Acc4 + Acc5) / 5
+```
+In sklearn, `cv=5` means 5 folds (the "CV = 1 ... Exp 1" labels in your notes refer to the first fold or experiment).
+
+> Note: in your sketch Exp 1 is labeled "Acc 2". It should be **Acc 1**.
+
+### Choosing K
+- **K = 5 or K = 10** are the standard defaults.
+- **Larger K** means less bias, more variance, and more compute (K = n is LOOCV).
+- **Smaller K** means more bias (less training data per fold), less variance, and faster.
+
+### Pros
+- Every sample is used for both training and validation
+- Much cheaper than LOOCV (K models instead of n)
+- Good bias-variance tradeoff for the estimate
+- Provides **mean and standard deviation** of performance
+
+### Cons
+- Needs K model trainings
+- On **imbalanced classification**, a fold may end up with very few (or zero) minority-class samples, which is solved by Stratified K-Fold
+- **Not valid for time series** (it shuffles time order)
+
+### Code
+```python
+from sklearn.model_selection import KFold, cross_val_score
+
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+scores = cross_val_score(model, X, y, cv=kf)
+print(f"Mean: {scores.mean():.3f}  Std: {scores.std():.3f}")
+```
+
+---
+
+## 11. Stratified K-Fold Cross-Validation
+
+### Definition
+K-Fold CV where each fold **preserves the original class proportions** of the target variable.
+
+### Why is it needed?
+Suppose your dataset is 90% class A and 10% class B (**imbalanced**). With plain K-Fold, one fold might get almost no class B samples, so validation scores are misleading or even undefined (e.g., recall on a class that does not appear).
+
+**Example:**
+```
+Dataset: 1000 rows -> 900 "No Fraud", 100 "Fraud"  (10%)
+
+Stratified 5-fold: each validation fold has 200 rows
+-> ~180 "No Fraud" and ~20 "Fraud" (exactly the 90/10 ratio in every fold)
+```
+
+### Pros
+- Reliable estimate for **imbalanced classification**
+- Lower variance across folds than plain K-Fold
+- Default in sklearn for classifiers when you pass `cv=5` to `cross_val_score`
+
+### Cons
+- Only for **classification** (needs discrete class labels)
+- Not for time series
+
+### Code
+```python
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+scores = cross_val_score(model, X, y, cv=skf, scoring='f1')
+```
+
+---
+
+## 12. Time Series Cross-Validation
+
+### Definition
+A CV method for **time-ordered data** where the training set always comes **before** the validation set in time. Folds are never shuffled, so the model never "sees the future".
+
+### Why normal K-Fold fails here
+Random shuffling lets the model **train on future data and predict the past**, which is **data leakage** and gives unrealistically good scores. In production you always predict the future from the past.
+
+### Your example: Product Sentiment Analysis over Time
+Sentiment about a product changes with time (new releases, trends, seasons). The model must be validated on **later** reviews than it was trained on.
+
+### How it works (expanding window)
+
+```
+Fold 1: Train [1 2 3]              -> Validate [4]
+Fold 2: Train [1 2 3 4]            -> Validate [5]
+Fold 3: Train [1 2 3 4 5]          -> Validate [6]
+Fold 4: Train [1 2 3 4 5 6]        -> Validate [7]
+                ----------> Time ---------->
+```
+Training grows each fold (**expanding window**). A **rolling / sliding window** variant keeps the training window at a fixed size and moves it forward.
+
+### Pros
+- Respects temporal order, so there is **no leakage**
+- Realistic simulation of production forecasting
+
+### Cons
+- Earlier folds have less training data
+- Fewer usable folds, and the earliest data is never validated
+
+### Code
+```python
+from sklearn.model_selection import TimeSeriesSplit
+
+tscv = TimeSeriesSplit(n_splits=5)
+for train_idx, val_idx in tscv.split(X):
+    # train_idx always < val_idx in time
+    ...
+```
+
+---
+
+## 13. Comparison of CV Methods
+
+| Method | # Models trained | Best for | Main drawback |
+|---|---|---|---|
+| **Hold-out** | 1 | Large datasets, quick check | Result depends on one random split |
+| **LOOCV** | n | Very small datasets | Expensive, high variance of the estimate |
+| **Leave-P-Out** | C(n, p) | Tiny datasets (theory) | Combinatorial explosion |
+| **K-Fold** | K | General purpose (default) | Issues with imbalanced classes and time order |
+| **Stratified K-Fold** | K | Imbalanced classification | Classification only |
+| **Time Series CV** | K | Temporal data | Less data in early folds |
+
+**Decision guide:**
+```
+Time-ordered data?            -> Time Series Split
+Classification + imbalance?   -> Stratified K-Fold
+Tiny dataset (< ~100 rows)?   -> LOOCV (or repeated K-Fold)
+Everything else               -> K-Fold with K = 5 or 10
+```
+
+---
+
+## Bonus: Combining Regularization + CV
+
+CV is how you **choose λ** (and `l1_ratio`) for Ridge/Lasso/Elastic Net:
+
+```python
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import Ridge
+
+grid = GridSearchCV(
+    Ridge(),
+    param_grid={'alpha': [0.001, 0.01, 0.1, 1, 10, 100]},
+    cv=5,
+    scoring='neg_mean_squared_error'
+)
+grid.fit(X_train, y_train)
+print(grid.best_params_)
+print(grid.score(X_test, y_test))   # touch the test set only once, at the end
+```
+
+---
+
+# PART C: INTERVIEW PRACTICE
+
+## 14. Interview Questions and Answers: Regularization
+
+### Basic Level
+
+**Q1. What is overfitting and how do you detect it?**
+Overfitting is when a model fits training data (including noise) so closely that it performs poorly on unseen data. It is detected by a **large gap between training and validation/test performance** (high train accuracy, low test accuracy). It corresponds to low bias and high variance.
+
+**Q2. What is regularization and why do we use it?**
+Regularization adds a penalty on the size of model coefficients to the loss function. It discourages overly complex models, reduces variance and so prevents overfitting, at the price of a small increase in bias.
+
+**Q3. What is Ridge regression? Write its cost function.**
+Linear regression with an L2 penalty:
+`J(θ) = (1/2m) Σ(hθ(x) − y)² + λ Σθⱼ²`.
+It shrinks coefficients toward zero but never makes them exactly zero.
+
+**Q4. What is Lasso regression? Write its cost function.**
+Linear regression with an L1 penalty:
+`J(θ) = (1/2m) Σ(hθ(x) − y)² + λ Σ|θⱼ|`.
+It can drive coefficients to exactly zero, performing feature selection.
+
+**Q5. What is the role of λ (lambda)?**
+It is a hyperparameter controlling the strength of regularization. λ = 0 gives plain linear regression. Increasing λ shrinks the slopes more (λ ↑ → slope ↓), reducing variance but increasing bias. Too large a λ causes underfitting. It is tuned using cross-validation.
+
+**Q6. What is the main difference between L1 and L2 regularization?**
+L1 penalizes the absolute values and yields **sparse** solutions (feature selection). L2 penalizes the squares and yields **small but non-zero** coefficients, keeping all features.
+
+**Q7. Does Ridge regression do feature selection?**
+No. It shrinks coefficients but never sets them exactly to zero, so all features remain. Lasso or Elastic Net should be used for feature selection.
+
+**Q8. Is the intercept (θ₀ / bias term) regularized?**
+Typically no. Penalizing it would make predictions depend on the origin of the target variable. sklearn does not penalize the intercept.
+
+### Intermediate Level
+
+**Q9. Why does Lasso produce exact zeros but Ridge doesn't?**
+*Geometric:* the L1 constraint region is a diamond with corners on the axes, and the loss contours usually touch it at a corner (where a coefficient is 0). The L2 region is a smooth circle with no corners.
+*Gradient:* the L2 penalty gradient `2λθ` vanishes as θ → 0, so shrinkage slows down near zero. The L1 gradient `λ·sign(θ)` is constant, so it keeps pushing small coefficients all the way to zero.
+
+**Q10. Why must we scale features before Ridge/Lasso?**
+The penalty depends on coefficient magnitude, and coefficient magnitude depends on feature scale. A feature measured in small units (e.g., kilometers instead of meters) gets a larger coefficient and is penalized unfairly. Standardizing makes the penalty fair across features.
+
+**Q11. How do you choose the value of λ?**
+Using cross-validation: try a grid (often log-spaced, e.g., 0.001 to 100), compute the CV score for each, and pick the λ with the best validation performance (`RidgeCV`, `LassoCV`, `GridSearchCV`). Do not choose it using the test set.
+
+**Q12. How does Ridge handle multicollinearity?**
+With correlated features, `XᵀX` is nearly singular and OLS coefficients become huge and unstable. Ridge adds `λI`, which makes the matrix invertible and well-conditioned, spreading weight across correlated features and stabilizing the coefficients.
+
+**Q13. What problem does Lasso have with correlated features?**
+It tends to pick one feature from a correlated group arbitrarily and zero out the others, and the choice may change with small data changes, so it is unstable. Elastic Net fixes this with its grouping effect.
+
+**Q14. What is Elastic Net and when would you use it?**
+A combination of L1 and L2 penalties. Use it when you have many features, correlated features, or `p > n`, and you want both feature selection and coefficient stability.
+
+**Q15. Explain the bias-variance tradeoff in the context of λ.**
+- λ small gives low bias, high variance (may overfit).
+- λ large gives high bias, low variance (may underfit).
+The optimal λ minimizes total validation error and sits between the two extremes.
+
+### Advanced Level
+
+**Q16. Ridge has a closed-form solution. What is it, and why is it always solvable?**
+`θ = (XᵀX + λI)⁻¹ Xᵀy`. For λ > 0, `XᵀX + λI` is positive definite and therefore always invertible, even when features are collinear or `p > n`.
+
+**Q17. Why does Lasso have no closed-form solution?**
+The |θ| term is not differentiable at 0, so you cannot set the gradient to zero and solve analytically. It is solved numerically with coordinate descent, LARS or subgradient methods.
+
+**Q18. Interpret regularization from a Bayesian viewpoint.**
+- Ridge = MAP estimation with a **Gaussian prior** on the weights.
+- Lasso = MAP estimation with a **Laplace prior** on the weights (sharply peaked at 0, which encourages sparsity).
+
+**Q19. In Lasso, with p > n, how many features can be selected?**
+At most `n` (the number of samples). Elastic Net does not have this limitation.
+
+**Q20. Can regularization be applied to models other than linear regression?**
+Yes. Logistic regression (the `C` parameter is 1/λ), neural networks (weight decay, which is L2, plus dropout), SVMs (C), and tree models (max depth, min samples, pruning, and shrinkage in boosting).
+
+**Q21. Does regularization always improve performance?**
+No. If the model is already underfitting or the data is plentiful and clean, regularization can hurt. It helps when variance is the problem.
+
+---
+
+## 15. Interview Questions and Answers: Cross-Validation
+
+### Basic Level
+
+**Q22. What is cross-validation and why do we use it?**
+A technique that repeatedly splits data into train and validation sets, trains and evaluates the model on each split, and averages the scores. It gives a more reliable and less split-dependent estimate of generalization performance and is used for model selection and hyperparameter tuning.
+
+**Q23. What is the difference between training, validation and test sets?**
+Training data fits the model parameters. Validation data is used to tune hyperparameters and select models. The test data is held out and used only once at the end to give an unbiased estimate of final performance.
+
+**Q24. Why not just use a single train-test split?**
+The result depends on which samples fall in each set (hence `random_state` changes your score from, e.g., 85% to 92% to 78%). CV averages over many splits, which reduces this luck factor.
+
+**Q25. Explain K-Fold cross-validation.**
+Split data into K equal folds. For each fold, use it as validation and train on the other K−1 folds. Average the K scores. Each sample is validated exactly once. With n = 500 and K = 5, each validation fold has 100 samples.
+
+**Q26. What value of K should you pick?**
+K = 5 or 10 is the common default. Larger K gives a less biased but more expensive and higher-variance estimate. Smaller K is cheaper but more pessimistically biased because each model trains on less data.
+
+**Q27. What is LOOCV?**
+K-Fold with K = n. Each single observation is used as validation once, while the other n−1 are used for training. It trains n models.
+
+**Q28. What are the disadvantages of LOOCV?**
+Very high computational cost (n models), extremely noisy individual validation scores, and highly correlated training sets, which gives a high-variance overall estimate. It is useful only for small datasets.
+
+**Q29. What is Leave-P-Out CV?**
+Every possible combination of P samples is left out as validation, giving C(n, p) experiments. LOOCV is the p = 1 case. It is impractical for anything but tiny datasets.
+
+### Intermediate Level
+
+**Q30. What is Stratified K-Fold and when do you use it?**
+K-Fold that keeps the class distribution the same in every fold. Use it for classification, especially with imbalanced classes, so every fold contains enough minority samples.
+
+**Q31. Why can't we use standard K-Fold on time series?**
+Shuffling lets the model train on future data to predict the past, which causes data leakage and over-optimistic scores. Time Series CV keeps training data strictly earlier than validation data (expanding or rolling window).
+
+**Q32. Explain Time Series CV with the product-sentiment example.**
+Reviews are ordered by time. Fold 1 trains on month 1–3 and validates on month 4. Fold 2 trains on months 1–4 and validates on month 5, and so on. This mimics real deployment, where you predict sentiment for new reviews using a model trained on older ones.
+
+**Q33. How is CV used in hyperparameter tuning?**
+For each candidate hyperparameter set (e.g., λ values), run K-Fold CV and compute the mean validation score. Pick the best, then retrain on the full training set and evaluate **once** on the test set (`GridSearchCV` / `RandomizedSearchCV`).
+
+**Q34. What is data leakage in CV, and how does it commonly happen?**
+When information from the validation fold influences training. Common causes: scaling/imputing/feature-selecting on the **whole dataset before** splitting, using time-shuffled data, and duplicates across folds. The fix is to put preprocessing **inside a Pipeline** so it is fit only on training folds.
+
+**Q35. After CV, what model do you deploy?**
+CV is for evaluating and selecting. Once the best configuration is chosen, **retrain on the entire training data** (or all data) and evaluate on the held-out test set. You don't deploy one of the fold models.
+
+**Q36. What does a large standard deviation across folds tell you?**
+The model is unstable or sensitive to the data it sees (high variance), the dataset is small or has outliers, or the folds are not representative (consider stratification or more data).
+
+**Q37. Your notes say overfitting shows as training accuracy ↑↑ and validation accuracy ↓↓. Explain.**
+When the model memorizes the training set, training accuracy is very high but accuracy on held-out validation folds is much lower. That gap indicates overfitting, and it will also show up as poor accuracy on new test data. CV exposes this *before* you touch the test set.
+
+### Advanced Level
+
+**Q38. Compare the bias and variance of the CV estimate for LOOCV vs 5-fold vs 10-fold.**
+LOOCV has the lowest bias (trains on n−1 samples) but high variance. 5-fold has higher bias (trains on 80%) but lower variance. 10-fold is the usual compromise. Empirically, 5–10 folds give the best bias-variance tradeoff for the estimate.
+
+**Q39. What is nested cross-validation?**
+CV within CV. The **inner loop** tunes hyperparameters and the **outer loop** estimates generalization performance. It avoids the optimistic bias that arises when the same CV is used both to tune and to report performance.
+
+**Q40. What is Repeated K-Fold?**
+Runs K-Fold multiple times with different random shuffles and averages all results, which gives a more stable estimate, especially for small datasets.
+
+**Q41. What is Group K-Fold and when do you need it?**
+When samples are grouped (e.g., multiple records per patient or user), all records from one group must be in the same fold. Otherwise the model sees the same patient in training and validation, which is leakage.
+
+**Q42. How would you do CV with a highly imbalanced dataset and resampling (SMOTE)?**
+Use Stratified K-Fold, and apply SMOTE **only on the training folds, inside the pipeline** (`imblearn.pipeline.Pipeline`). Never oversample before splitting, otherwise synthetic copies of validation points leak into training.
+
+---
+
+## 16. Scenario and Rapid-Fire Questions
+
+**S1. Train R² = 0.98, validation R² = 0.55. What do you do?**
+The model is overfitting. Options: add Ridge/Lasso/Elastic Net regularization, increase λ, reduce features, get more data, simplify the model, use CV to tune.
+
+**S2. You have 300 features, 200 samples, many are correlated. Which model?**
+Elastic Net (p > n, correlated features, and you want selection). Tune `alpha` and `l1_ratio` with `ElasticNetCV`.
+
+**S3. You want an interpretable model with only the most important features. Which?**
+Lasso (or Elastic Net with high `l1_ratio`).
+
+**S4. All features are believed to matter a little. Which?**
+Ridge.
+
+**S5. Fraud dataset, 1% positives. How do you cross-validate?**
+Stratified K-Fold, and evaluate with precision, recall, F1 or PR-AUC rather than accuracy.
+
+**S6. Stock/sales forecasting. Which CV?**
+Time Series Split (expanding or rolling window).
+
+**S7. Dataset of 60 rows. Which CV?**
+LOOCV or Repeated (Stratified) K-Fold.
+
+**S8. After applying Lasso, a coefficient became 0. What does it mean?**
+That feature contributes little given the other features, so it is effectively removed from the model (not necessarily useless on its own, since it may be redundant with another feature).
+
+**S9. Test score is much lower than CV score. Why?**
+Possible reasons: data leakage during CV, hyperparameters over-tuned on CV, distribution shift between train and test, or a small test set.
+
+**S10. Does increasing λ always increase training error?**
+Yes, training error is non-decreasing as λ grows (the model is increasingly constrained). Validation error first decreases and then increases (a U-shape).
+
+### True / False Rapid Fire
+
+| Statement | Answer |
+|---|---|
+| Ridge can set coefficients exactly to 0 | **False** |
+| Lasso can perform feature selection | **True** |
+| λ = 0 in Ridge is the same as OLS | **True** |
+| Higher λ means higher bias | **True** |
+| LOOCV trains n models | **True** |
+| K-Fold validates each sample exactly once | **True** |
+| Standard K-Fold is suitable for time series | **False** |
+| Test set can be used to tune hyperparameters | **False** |
+| Stratified K-Fold works for regression directly | **False** |
+| Elastic Net = L1 + L2 | **True** |
+
+---
+
+## 17. Cheat Sheet
+
+### Regularization
+
+| | Ridge | Lasso | Elastic Net |
+|---|---|---|---|
+| Penalty | λΣθ² | λΣ\|θ\| | λ₁Σθ² + λ₂Σ\|θ\| |
+| Zeros? | No | Yes | Yes |
+| Use | Many small effects, multicollinearity | Feature selection | Correlated features, p > n |
+
+```
+λ ↑  ->  slopes ↓  ->  variance ↓, bias ↑
+λ ↓  ->  slopes ↑  ->  variance ↑, bias ↓
+```
+
+### Cross-Validation
+
+```
+Hold-out       -> 1 split, fast, high-luck
+LOOCV          -> n models, tiny data
+Leave-P-Out    -> C(n,p) models, theory only
+K-Fold         -> K models, default (K = 5/10)
+Stratified KF  -> keeps class ratio, classification/imbalance
+TimeSeriesSplit-> train always before validation, temporal data
+```
+
+### Golden Rules
+1. Scale features before Ridge/Lasso/Elastic Net.
+2. Choose λ with CV, **never** with the test set.
+3. Put preprocessing **inside a Pipeline** to prevent leakage.
+4. Touch the test set **once**, at the very end.
+5. Match the CV method to the data (class imbalance, time order, groups).
+
+---
+
+*End of notes. Good luck with your interviews!*
